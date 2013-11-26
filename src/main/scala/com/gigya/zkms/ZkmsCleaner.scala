@@ -14,9 +14,12 @@ import org.apache.curator.utils.ZKPaths
  * @author Rotem Hermon
  */
 protected class ZkmsCleaner(service: zkmsService) {
+  // run the cleaner every X seconds
+  val TASK_RATE_SECONDS = 60
+  
   private val logger = LoggerFactory.getLogger(this.getClass());
   var executor: ScheduledExecutorService = null;
-
+  
   def start() {
     if (null == executor) {
       executor = Executors.newSingleThreadScheduledExecutor()
@@ -25,7 +28,7 @@ protected class ZkmsCleaner(service: zkmsService) {
           logger.debug("ZkmsCleaner - run")
           doCleanup
         }
-      }, 1, 10, TimeUnit.SECONDS)
+      }, 1, TASK_RATE_SECONDS, TimeUnit.SECONDS)
     }
     else throw new RuntimeException("executor has already started");
   }
