@@ -19,20 +19,29 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent
 import org.apache.curator.utils.ZKPaths
+import org.apache.curator.framework.recipes.leader.LeaderSelector
+import org.apache.curator.framework.recipes.leader.LeaderSelectorListener
+import org.apache.curator.framework.state.ConnectionState
+import org.apache.zookeeper.KeeperException.NodeExistsException
 
-class zkmsService(zkConnection: String) {
+class zkmsService(zkConnection: String) extends LeaderSelectorListener {
   import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
+  private val CLIENTS_PATH = "/clients"
   private val SUBSCRIBERS_PATH = "/subscribers"
   private val MESSAGES_PATH = "/messages"
+  private val CLEANER_LEADER_PATH = "/cleaner_leader";
   private val logger = LoggerFactory.getLogger(this.getClass());
-  private val executorService: ExecutorService = Executors.newFixedThreadPool(5, ThreadUtils.newThreadFactory("zkmsEventPool"));
+  private val executorService: ExecutorService = Executors.newFixedThreadPool(5, ThreadUtils.newThreadFactory("zkmsThreadPool"));
   private val watchers = new ConcurrentHashMap[String, WatcherData].asScala;
+  private val monitor: AutoResetEvent = new AutoResetEvent(false);
+  private var _isLeader = false;
+  private var cleaner: ZkmsCleaner = null;
 
   // create the curator zookeeper client
   logger.debug("creating zk client for: " + zkConnection)
-  private var zkClient: CuratorFramework = CuratorFrameworkFactory.builder()
+  protected[zkms] var zkClient: CuratorFramework = CuratorFrameworkFactory.builder()
     .namespace(ZK_NAMESPACE)
     .connectString(zkConnection)
     .retryPolicy(new ExponentialBackoffRetry(200, 100))
@@ -40,11 +49,16 @@ class zkmsService(zkConnection: String) {
   // start it
   zkClient.start()
   // make sure the paths exists
+  zkClient.newNamespaceAwareEnsurePath(CLIENTS_PATH).ensure(zkClient.getZookeeperClient())
   zkClient.newNamespaceAwareEnsurePath(SUBSCRIBERS_PATH).ensure(zkClient.getZookeeperClient())
   zkClient.newNamespaceAwareEnsurePath(MESSAGES_PATH).ensure(zkClient.getZookeeperClient())
+  private var leaderSelector: LeaderSelector = new LeaderSelector(zkClient, CLEANER_LEADER_PATH, this);
+  leaderSelector.start();
 
-  def send(client: String, topic: String, message: String) {
-
+  def shutdown() {
+    if (_isLeader) monitor.set;
+    executorService.shutdown();
+    zkClient.close();
   }
 
   def broadcast(topic: String, message: String, sendToSelf: Boolean = false) {
@@ -67,12 +81,14 @@ class zkmsService(zkConnection: String) {
   }
 
   def subscribe(topic: String, callback: messageCallback) {
+    val clientPath = clientsPath(clientId)
     val subscriptionPath = subscriberPath(topic, clientId)
     val messagesPath = topicPath(topic, clientId)
     // verify we're not already subscribed
     if (watchers.contains(messagesPath)) throw new AlreadySubscribedException(topic)
     // create am ephemeral path for this client under the requested topic to mark the subscription
-    zkClient.create().creatingParentsIfNeeded().withMode(CreateMode.EPHEMERAL).forPath(subscriptionPath)
+    createEphemeralIgnoreExists(clientPath)
+    createEphemeralIgnoreExists(subscriptionPath)
     // create a listener for the messages path
     val resourcesCache = new PathChildrenCache(zkClient, messagesPath, true, false, executorService)
     resourcesCache.start(StartMode.BUILD_INITIAL_CACHE)
@@ -81,12 +97,42 @@ class zkmsService(zkConnection: String) {
     watchers.put(messagesPath, new WatcherData(resourcesCache, callback));
   }
 
-  def unsubscribe(topic: String) {}
+  def unsubscribe(topic: String) {
+    val subscriptionPath = subscriberPath(topic, clientId)
+    val messagesPath = topicPath(topic, clientId)
+    // delete our subscription and messages
+    deleteRecursive(messagesPath)
+    deleteRecursive(subscriptionPath)
+  }
 
-  private def subscribersPath(topic: String) = SUBSCRIBERS_PATH + "/" + topic
-  private def subscriberPath(topic: String, clientId: String) = SUBSCRIBERS_PATH + "/" + topic + "/" + clientId
-  private def topicPath(topic: String, clientId: String) = MESSAGES_PATH + "/" + clientId + "/" + topic
-  private def messagePath(topic: String, clientId: String) = topicPath(topic, clientId) + "/msg";
+  private def createEphemeralIgnoreExists(path: String) {
+    try {
+      zkClient.create().creatingParentsIfNeeded().withMode(CreateMode.EPHEMERAL).forPath(path)
+    }
+    catch {
+      // ignore if node already exists
+      case e: NodeExistsException => {}
+    }
+  }
+
+  protected[zkms] def deleteRecursive(path: String) {
+    if (path.isNullOrEmpty)
+      throw new IllegalArgumentException("path is empty");
+    zkClient.getChildren().forPath(path).asScala.foreach(child => {
+      val childPath = path + "/" + child;
+      deleteRecursive(childPath)
+    })
+    zkClient.delete().guaranteed().forPath(path)
+  }
+
+  protected[zkms] def clientsPath: String = CLIENTS_PATH
+  protected[zkms] def clientsPath(clientId: String): String = clientsPath + "/" + clientId
+  protected[zkms] def subscribersPath(topic: String) = SUBSCRIBERS_PATH + "/" + topic
+  protected[zkms] def subscriberPath(topic: String, clientId: String) = SUBSCRIBERS_PATH + "/" + topic + "/" + clientId
+  protected[zkms] def messagesPath:String = MESSAGES_PATH
+  protected[zkms] def messagesPath(clientId:String):String = messagesPath + "/" + clientId 
+  protected[zkms] def topicPath(topic: String, clientId: String) = messagesPath(clientId) + "/" + topic
+  protected[zkms] def messagePath(topic: String, clientId: String) = topicPath(topic, clientId) + "/msg";
 
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
 
@@ -142,6 +188,40 @@ class zkmsService(zkConnection: String) {
   private def submitToExecutor(command: Runnable) {
     executorService.submit(command);
   }
+
+  /* (non-Javadoc)
+	 * @see org.apache.curator.framework.recipes.leader.LeaderSelectorListener#takeLeadership(org.apache.curator.framework.CuratorFramework)
+	 */
+  protected override def takeLeadership(client: CuratorFramework) {
+    logger.info("got leadership");
+    // we are now the leader. This method should not return until we want to
+    // relinquish leadership
+    // start the leader task
+    if (null == cleaner)
+      cleaner = new ZkmsCleaner(this)
+    cleaner.start;
+    _isLeader = true;
+    // wait until we loose leadership
+    monitor.waitOne();
+    logger.info("lost leadership");
+    // we lost leadership, kill the task
+    cleaner.stop;
+    cleaner = null;
+    _isLeader = false;
+  }
+
+  /* (non-Javadoc)
+	 * @see org.apache.curator.framework.state.ConnectionStateListener#stateChanged(org.apache.curator.framework.CuratorFramework, org.apache.curator.framework.state.ConnectionState)
+	 */
+  protected override def stateChanged(client: CuratorFramework, newState: ConnectionState) {
+    // you MUST handle connection state changes. This WILL happen in
+    // production code.
+    if ((newState == ConnectionState.LOST) || (newState == ConnectionState.SUSPENDED)) {
+      // signal that we lost the leadership
+      monitor.set();
+    }
+  }
+
 }
 
 object zkmsService {

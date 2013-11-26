@@ -5,9 +5,7 @@ import com.gigya.zkms.zkmsService._
 import org.sellmerfud.optparse._
 
 object Broadcaster {
-  private val usage = """
-    Usage: Broadcaster --zookeeper <zk-connection> --topic <string> <message>
-  """
+
   def main(args: Array[String]) {
     
     case class Config(
@@ -40,5 +38,6 @@ object Broadcaster {
 
     val service = new zkmsService(config.zookeeper)
     service.broadcast(config.topic, config.message.mkString(" "));
+    service.shutdown
   }
 }

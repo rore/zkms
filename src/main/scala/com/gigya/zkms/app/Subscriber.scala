@@ -6,9 +6,7 @@ import org.sellmerfud.optparse._
 import com.gigya.zkms.MessageReceived
 
 object Subscriber {
-  private val usage = """
-    Usage: Subscriber --zookeeper <zk-connection> --topic <string>
-  """
+
   def main(args: Array[String]) {
     
     case class Config(
@@ -43,7 +41,11 @@ object Subscriber {
     service.subscribe(config.topic, message)
     var line:String=null;
     while ({line = Console.readLine; line} != null){
-      if (line == "quit" || line == "q") sys.exit(0)
+      if (line == "quit" || line == "q") {
+        service.unsubscribe(config.topic)
+        service.shutdown
+        sys.exit(0)
+      }
     } 
   }
   
