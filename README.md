@@ -64,6 +64,7 @@ Function1<MessageReceived, BoxedUnit> messageCallback = new AbstractFunction1<Me
 	    public BoxedUnit apply(MessageReceived message) {
 	    	String topic = message.topic();
 	    	String msg = message.message();
+	    	// Do your thing here
 	        return null;
     }
 };
