@@ -34,8 +34,8 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  *
  * @author Rotem Hermon
  */
-class zkmsService(zkConnection: String, listenerThreads:Int=10) extends LeaderSelectorListener {
-  def this(zkConnection: String) = this(zkConnection, 10)
+class zkmsService(zkConnection: String, listenerThreads:Int=5) extends LeaderSelectorListener {
+  def this(zkConnection: String) = this(zkConnection, 5)
   import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
