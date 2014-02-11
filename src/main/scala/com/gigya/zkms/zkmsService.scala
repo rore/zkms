@@ -33,6 +33,12 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  * that need a simple way of broadcasting messages to all nodes of the service.
  *
  * @author Rotem Hermon
+ * 
+ * @param zkConnection
+ * 			zookeeper connection string
+ * @param listenerThreads
+ * 			the number of threads to use for zookeeper notifications and subscriber callbacks
+ *    
  */
 class zkmsService(zkConnection: String, listenerThreads:Int=5) extends LeaderSelectorListener {
   def this(zkConnection: String) = this(zkConnection, 5)
