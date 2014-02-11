@@ -34,7 +34,8 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  *
  * @author Rotem Hermon
  */
-class zkmsService(zkConnection: String) extends LeaderSelectorListener {
+class zkmsService(zkConnection: String, listenerThreads:Int=10) extends LeaderSelectorListener {
+  def this(zkConnection: String) = this(zkConnection, 10)
   import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
@@ -43,8 +44,8 @@ class zkmsService(zkConnection: String) extends LeaderSelectorListener {
   private val MESSAGES_PATH = "/messages"
   private val CLEANER_LEADER_PATH = "/cleaner_leader";
   private val logger = LoggerFactory.getLogger(this.getClass());
-  private val executorService: ExecutorService = Executors.newFixedThreadPool(5, ThreadUtils.newThreadFactory("zkmsThreadPool"));
-  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala;
+  private val executorService: ExecutorService = Executors.newFixedThreadPool(listenerThreads, ThreadUtils.newThreadFactory("zkmsThreadPool"));
+  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala; 
   private val monitor: AutoResetEvent = new AutoResetEvent(false);
   private var _isLeader = false;
   private var cleaner: ZkmsCleaner = null;
