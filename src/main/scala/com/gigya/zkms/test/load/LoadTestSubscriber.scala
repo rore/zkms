@@ -34,7 +34,7 @@ object LoadTestSubscriber {
       
     }
     val config = try {
-      parser.parse(args, Config()).validate
+      parser.parse(args, Config()).validate 
     }
     catch {
       case e: OptionParserException => {
