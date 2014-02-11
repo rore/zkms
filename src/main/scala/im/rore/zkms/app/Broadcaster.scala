@@ -1,7 +1,7 @@
-package com.gigya.zkms.app
+package im.rore.zkms.app
 
-import com.gigya.zkms.zkmsService
-import com.gigya.zkms.zkmsService._
+import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
 
 object Broadcaster {

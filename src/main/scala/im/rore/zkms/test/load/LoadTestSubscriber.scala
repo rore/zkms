@@ -1,9 +1,9 @@
-package com.gigya.zkms.test.load
+package im.rore.zkms.test.load
 
-import com.gigya.zkms.zkmsService
-import com.gigya.zkms.zkmsService._
+import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
-import com.gigya.zkms.MessageReceived
+import im.rore.zkms.MessageReceived
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors

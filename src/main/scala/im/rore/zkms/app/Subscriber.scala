@@ -1,9 +1,9 @@
-package com.gigya.zkms.app
+package im.rore.zkms.app
 
-import com.gigya.zkms.zkmsService
-import com.gigya.zkms.zkmsService._
+import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
-import com.gigya.zkms.MessageReceived
+import im.rore.zkms.MessageReceived
 
 object Subscriber {
 

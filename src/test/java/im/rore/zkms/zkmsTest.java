@@ -1,6 +1,8 @@
-package com.gigya.zkms;
+package im.rore.zkms;
 
 import static org.junit.Assert.*;
+import im.rore.zkms.MessageReceived;
+import im.rore.zkms.zkmsService;
 
 import org.junit.After;
 import org.junit.Before;

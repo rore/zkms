@@ -1,4 +1,4 @@
-package com.gigya.zkms
+package im.rore.zkms
 
 class ZkmsException(message: String, cause: Throwable) extends Exception(message, cause) {
   def this(message: String) = this(message, null)

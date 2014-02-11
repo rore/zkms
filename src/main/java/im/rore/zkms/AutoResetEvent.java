@@ -1,5 +1,5 @@
 
-package com.gigya.zkms;
+package im.rore.zkms;
 
 public class AutoResetEvent
 {

@@ -1,8 +1,11 @@
-package com.gigya.zkms
+package im.rore.zkms
 
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.CuratorFrameworkFactory
 import org.apache.curator.retry.ExponentialBackoffRetry
+
+import im.rore.zkms.AutoResetEvent;
+
 import java.util.UUID
 import org.apache.zookeeper.KeeperException
 import org.apache.zookeeper.KeeperException.NoNodeException
@@ -42,7 +45,7 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  */
 class zkmsService(zkConnection: String, listenerThreads:Int=5) extends LeaderSelectorListener {
   def this(zkConnection: String) = this(zkConnection, 5)
-  import zkmsService._
+import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
   private val CLIENTS_PATH = "/clients"

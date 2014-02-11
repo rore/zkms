@@ -1,7 +1,7 @@
-package com.gigya.zkms.test.load
+package im.rore.zkms.test.load
 
-import com.gigya.zkms.zkmsService
-import com.gigya.zkms.zkmsService._
+import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Await
