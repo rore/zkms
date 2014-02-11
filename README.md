@@ -17,9 +17,8 @@ Use this library if you expect:
 - Low message rate.
 - A medium size cluster of nodes (a few to a few dozens of nodes / subscribers).
 
-**Don't** use this if you expect high message throughput or a lot of subscribers. Performance will probably *suck*.
-
-Also note that this has not been thoroughly tested yet, so do your own tests!
+**Don't** use this if you expect high message throughput or a lot of subscribers. Performance will probably *suck*.   
+See this [netflix note](https://github.com/Netflix/curator/wiki/Tech-Note-4) for additional information on possible issues with using zookeeper for messaging. 
 
 ##How to use
 
