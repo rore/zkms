@@ -23,6 +23,10 @@ import org.apache.curator.framework.recipes.leader.LeaderSelector
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListener
 import org.apache.curator.framework.state.ConnectionState
 import org.apache.zookeeper.KeeperException.NodeExistsException
+import scala.reflect.runtime.universe._
+import scala.reflect._
+import scala.reflect.api.TypeCreator
+import scala.reflect.api.Universe
 
 /**
  * A simple messaging service based on zookeeper.
@@ -33,17 +37,17 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  * that need a simple way of broadcasting messages to all nodes of the service.
  *
  * @author Rotem Hermon
- * 
+ *
  * @param zkConnection
  * 			zookeeper connection string
  * @param listenerThreads
  * 			the number of threads to use for zookeeper notifications and subscriber callbacks
- *    
+ *
  */
-abstract class zkmsService[T](zkConnection: String, listenerThreads:Int=5) 
-			extends LeaderSelectorListener {
-  def this(zkConnection: String) = this(zkConnection, 5)
-import zkmsService._
+abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
+  extends LeaderSelectorListener {
+
+  import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
   private val CLIENTS_PATH = "/clients"
@@ -52,7 +56,7 @@ import zkmsService._
   private val CLEANER_LEADER_PATH = "/cleaner_leader";
   private val logger = LoggerFactory.getLogger(this.getClass());
   private val executorService: ExecutorService = Executors.newFixedThreadPool(listenerThreads, ThreadUtils.newThreadFactory("zkmsThreadPool"));
-  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala; 
+  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala;
   private val monitor: AutoResetEvent = new AutoResetEvent(false);
   private var _isLeader = false;
   private var cleaner: ZkmsCleaner[T] = null;
@@ -73,7 +77,7 @@ import zkmsService._
   // start the leader selection to enable a cleanup job to cleanup after disconnected nodes
   private var leaderSelector: LeaderSelector = new LeaderSelector(zkClient, CLEANER_LEADER_PATH, this);
   leaderSelector.start();
-
+  
   /**
    * Shuts down the service
    */
@@ -83,8 +87,8 @@ import zkmsService._
     zkClient.close();
   }
 
-   def serializeMessage(message:T) : Array[Byte] 
-   def deserializeMessage(bytes:Array[Byte]) : T 
+  def serializeMessage(message: T): Array[Byte]
+  def deserializeMessage(bytes: Array[Byte]): T
   /**
    * Broadcast a message to all subscribers of the topic
    *
@@ -142,12 +146,12 @@ import zkmsService._
     watchers.put(messagesPath, new WatcherData(resourcesCache, callback));
   }
 
-   /**
+  /**
    * Unsubscribe from a specific topic
    *
    *  @param topic
    *            topic to unsubscribe from
-   *            
+   *
    */
   def unsubscribe(topic: String) {
     val subscriptionPath = subscriberPath(topic, clientId)
@@ -188,8 +192,8 @@ import zkmsService._
   protected[zkms] def topicPath(topic: String, clientId: String) = messagesPath(clientId) + "/" + topic
   protected[zkms] def messagePath(topic: String, clientId: String) = topicPath(topic, clientId) + "/msg";
 
-  class MessageReceived(val topic:String, val message:T) {
-  }	
+  class MessageReceived(val topic: String, val message: T) {
+  }
 
   // a listener callback class that receives messages on changes in zNodes
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
@@ -207,7 +211,7 @@ import zkmsService._
       // if we got a message call the callback and delete the message
       if (!path.isNullOrEmpty) {
         if (null != message)
-        	callCallback(parentPath, topic, message)
+          callCallback(parentPath, topic, message)
         // delete the message
         zkClient.delete().forPath(path)
       }
@@ -293,7 +297,25 @@ object zkmsService {
   }
 }
 
-class zkmsStringService(zkConnection: String, listenerThreads:Int=5) extends zkmsService[String](zkConnection, listenerThreads) with NoSerializer {
+class zkmsStringService(zkConnection: String, listenerThreads: Int = 5) extends zkmsService[String](zkConnection, listenerThreads) with NoSerializer {
   def this(zkConnection: String) = this(zkConnection, 5)
+}
+
+private object Helper {
+    def mkTypeTag[T](mirror: Mirror)(tpe: Type): mirror.universe.TypeTag[T] =
+    mirror.universe.TypeTag[T](mirror, new TypeCreator {
+      def apply[U <: Universe with Singleton](m: scala.reflect.api.Mirror[U]): U#Type =
+        if (m eq mirror) tpe.asInstanceOf[U#Type]
+        else
+          throw new IllegalArgumentException
+      (s"Type defined in $mirror cannot be migrated to other mirrors.")
+    })
+
+}
+
+class zkmsObjectService[T](zkConnection: String, listenerThreads: Int)(implicit tag: ClassTag[T]) extends zkmsService[T](zkConnection, listenerThreads) with ObjectSerializer[T] {
+  //def this(zkConnection: String)(implicit tag: TypeTag[T]) = this(zkConnection, 5)
+  def this(zkConnection: String, classof: java.lang.Class[T]) = this(zkConnection, 5)(ClassTag(classof))
+  def t = classTag[T]
 }
 
