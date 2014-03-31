@@ -1,7 +1,6 @@
 package im.rore.zkms
 
 import im.rore.zkms.zkmsService._
-//import com.gensler.scalavro.types.AvroType
 import scala.reflect.runtime.universe._
 import scala.reflect._
 import java.io.ByteArrayOutputStream
