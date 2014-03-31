@@ -1,6 +1,6 @@
 package im.rore.zkms.test.load
 
-import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsStringService
 import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
 import scala.collection.mutable.ListBuffer
@@ -50,7 +50,7 @@ object LoadTestBroadcaster {
     }
 
     val pool: ExecutorService = Executors.newFixedThreadPool(config.threads)
-    val service = new zkmsService(config.zookeeper)
+    val service = new zkmsStringService(config.zookeeper)
     val bmessage = config.message.mkString(" ")
     val msgNum = new AtomicInteger 
     var timer = new AtomicDouble

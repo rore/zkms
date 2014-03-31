@@ -1,13 +1,11 @@
 package im.rore.zkms;
 
 import static org.junit.Assert.*;
-import im.rore.zkms.MessageReceived;
+import im.rore.zkms.zkmsStringService;
 import im.rore.zkms.zkmsService;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
 import scala.Function1;
 import scala.runtime.AbstractFunction1;
 import scala.runtime.BoxedUnit;
@@ -15,6 +13,7 @@ import scala.runtime.BoxedUnit;
 public class zkmsTest {
 
 	private String zkConnection = "hadoop-local";
+	private Boolean gotIt = false;
 	
 	@Before
 	public void init() throws Exception {
@@ -28,15 +27,27 @@ public class zkmsTest {
 	
 	@Test
 	public void testBroadcast() {
-		zkmsService service = new zkmsService(zkConnection);
+		zkmsStringService service = new zkmsStringService(zkConnection);
 		service.subscribe("topic1", f);
-		service.broadcast("topic1", "m1", false);
+		service.broadcast("topic1", "m1", true);
+		
+		int tries = 0;
+		while (!gotIt && tries < 10) {
+			tries ++;
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 
-	Function1<MessageReceived, BoxedUnit> f = new AbstractFunction1<MessageReceived, BoxedUnit>() {
-	    public BoxedUnit apply(MessageReceived message) {
+	Function1<zkmsStringService.MessageReceived, BoxedUnit> f = new AbstractFunction1<zkmsStringService.MessageReceived, BoxedUnit>() {
+	    public BoxedUnit apply(zkmsStringService.MessageReceived message) {
 	    	String topic = message.topic();
 	    	String msg = message.message();
+	    	gotIt = true;
 	        return null;
 	    }
 	};

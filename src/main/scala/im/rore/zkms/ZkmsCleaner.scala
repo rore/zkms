@@ -13,7 +13,7 @@ import org.apache.curator.utils.ZKPaths
  *
  * @author Rotem Hermon
  */
-protected class ZkmsCleaner(service: zkmsService) {
+protected class ZkmsCleaner[T](service: zkmsService[T]) {
   // run the cleaner every X seconds
   val TASK_RATE_SECONDS = 60
   

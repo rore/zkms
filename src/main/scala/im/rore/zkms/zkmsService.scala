@@ -3,9 +3,6 @@ package im.rore.zkms
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.CuratorFrameworkFactory
 import org.apache.curator.retry.ExponentialBackoffRetry
-
-import im.rore.zkms.AutoResetEvent;
-
 import java.util.UUID
 import org.apache.zookeeper.KeeperException
 import org.apache.zookeeper.KeeperException.NoNodeException
@@ -43,7 +40,8 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  * 			the number of threads to use for zookeeper notifications and subscriber callbacks
  *    
  */
-class zkmsService(zkConnection: String, listenerThreads:Int=5) extends LeaderSelectorListener {
+abstract class zkmsService[T](zkConnection: String, listenerThreads:Int=5) 
+			extends LeaderSelectorListener {
   def this(zkConnection: String) = this(zkConnection, 5)
 import zkmsService._
 
@@ -57,7 +55,7 @@ import zkmsService._
   private val watchers = new ConcurrentHashMap[String, WatcherData].asScala; 
   private val monitor: AutoResetEvent = new AutoResetEvent(false);
   private var _isLeader = false;
-  private var cleaner: ZkmsCleaner = null;
+  private var cleaner: ZkmsCleaner[T] = null;
 
   // create the curator zookeeper client
   logger.debug("creating zk client for: " + zkConnection)
@@ -85,6 +83,8 @@ import zkmsService._
     zkClient.close();
   }
 
+   def serializeMessage(message:T) : Array[Byte] 
+   def deserializeMessage(bytes:Array[Byte]) : T 
   /**
    * Broadcast a message to all subscribers of the topic
    *
@@ -95,9 +95,9 @@ import zkmsService._
    *  @param sendToSelf
    *            if true will send also to a subscriber running under the current client
    */
-  def broadcast(topic: String, message: String, sendToSelf: Boolean = false) {
+  def broadcast(topic: String, message: T, sendToSelf: Boolean = false) {
     if (topic.isNullOrEmpty) throw new IllegalArgumentException("topic is null")
-    if (message.isNullOrEmpty) throw new IllegalArgumentException("message is null")
+    if (null == message) throw new IllegalArgumentException("message is null")
     try {
       val path = subscribersPath(topic)
       // get all subscribers for topic
@@ -105,8 +105,9 @@ import zkmsService._
       if (children.size() == 0) throw new NoSubscribersException(topic)
       children.asScala.foreach(child => {
         if (sendToSelf || (child != zkmsService.clientId)) {
+          val bytes = serializeMessage(message)
           val msgPath = messagePath(topic, child)
-          zkClient.create().withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(msgPath, message.toByteArray)
+          zkClient.create().withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(msgPath, bytes)
         }
       })
     }
@@ -187,22 +188,26 @@ import zkmsService._
   protected[zkms] def topicPath(topic: String, clientId: String) = messagesPath(clientId) + "/" + topic
   protected[zkms] def messagePath(topic: String, clientId: String) = topicPath(topic, clientId) + "/msg";
 
+  class MessageReceived(val topic:String, val message:T) {
+  }	
+
   // a listener callback class that receives messages on changes in zNodes
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
 
     override def childEvent(client: CuratorFramework, event: PathChildrenCacheEvent) {
-      val (message: String, path: String) = event.getType() match {
+      val (message: T, path: String) = event.getType() match {
         // look for child add / update events - these are changed messages under our subscriber path
         case PathChildrenCacheEvent.Type.CHILD_ADDED | PathChildrenCacheEvent.Type.CHILD_UPDATED => {
           val fullPath = parentPath + "/" + ZKPaths.getNodeFromPath(event.getData().getPath());
-          val data = new String(event.getData().getData(), "UTF-8");
+          val data = deserializeMessage(event.getData().getData())
           (data, fullPath)
         }
-        case _ => ("", "")
+        case _ => (null, null)
       }
       // if we got a message call the callback and delete the message
-      if (!message.isNullOrEmpty) {
-        callCallback(parentPath, topic, message)
+      if (!path.isNullOrEmpty) {
+        if (null != message)
+        	callCallback(parentPath, topic, message)
         // delete the message
         zkClient.delete().forPath(path)
       }
@@ -213,7 +218,7 @@ import zkmsService._
   protected class WatcherData(val cache: PathChildrenCache, val callback: messageCallback)
 
   // call a callback function for a received message
-  private def callCallback(watcherPath: String, topic: String, message: String) {
+  private def callCallback(watcherPath: String, topic: String, message: T) {
     try {
       submitToExecutor {
         new Runnable() {
@@ -286,5 +291,9 @@ object zkmsService {
     def toByteArray: Array[Byte] = if (null == s) null else s.getBytes("UTF8")
     def isNullOrEmpty: Boolean = if (null == s || s.isEmpty()) true else false
   }
+}
+
+class zkmsStringService(zkConnection: String, listenerThreads:Int=5) extends zkmsService[String](zkConnection, listenerThreads) with NoSerializer {
+  def this(zkConnection: String) = this(zkConnection, 5)
 }
 

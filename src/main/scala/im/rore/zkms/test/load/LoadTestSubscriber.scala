@@ -1,9 +1,8 @@
 package im.rore.zkms.test.load
 
-import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsStringService
 import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
-import im.rore.zkms.MessageReceived
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -22,7 +21,7 @@ object LoadTestSubscriber {
 		}
 	}
 
-	def messageCallback(msg: MessageReceived) {
+	def messageCallback(msg: zkmsStringService#MessageReceived) {
 		pool.submit(task)
 	}
 
@@ -54,7 +53,7 @@ object LoadTestSubscriber {
 			}
 		}
 
-		val service = new zkmsService(config.zookeeper)
+		val service = new zkmsStringService(config.zookeeper)
 		service.subscribe(config.topic, messageCallback)
 		var line: String = null;
 		while ({ line = Console.readLine; line } != null) {
