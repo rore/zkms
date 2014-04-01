@@ -20,16 +20,18 @@ trait NoSerializer {
 trait ObjectSerializer[T] {
   implicit def t: ClassTag[T]
   
+  val pool = ScalaKryoInstantiator.defaultPool
+  
   def serializeMessage(message: T): Array[Byte] = {
     if (null == message) null
     else {
-      val bytes = ScalaKryoInstantiator.defaultPool.toBytesWithoutClass(message)
+      val bytes = pool.toBytesWithoutClass(message)
       bytes
     }
   }
   def deserializeMessage(bytes: Array[Byte]): T = {
     if (null == bytes) null.asInstanceOf[T]
-    else ScalaKryoInstantiator.defaultPool.fromBytes(bytes, t.runtimeClass.asInstanceOf[Class[T]])
+    else pool.fromBytes(bytes, t.runtimeClass.asInstanceOf[Class[T]])
   }
 } 
   

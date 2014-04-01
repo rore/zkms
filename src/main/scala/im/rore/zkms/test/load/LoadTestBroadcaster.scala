@@ -79,13 +79,17 @@ object LoadTestBroadcaster {
     for (a <- 1 to config.iterations) {
       tasks += task
     }
+    val starttime = System.nanoTime()
     pool.invokeAll(tasks).map(f => f.get())
+    val endtime = System.nanoTime()
+    val elapsed = (endtime - starttime)
     service.shutdown
     pool.shutdown()
     val total = timer.get()
     val totalmilis = (total /  1000000)
-    val timeperone = totalmilis / config.iterations
+    val elapsedmilis = (elapsed /  1000000)
+    val timeperone = elapsedmilis / config.iterations
     val cando = 1000 / timeperone
-    System.out.print("\ntotal time: " + totalmilis + " ms. Time per broadcast: " + timeperone + ". Can do " + cando + " per second")
+    System.out.print("\ntotal time: " + elapsedmilis + " (" + totalmilis + ")" + " ms. Time per broadcast: " + timeperone + ". Can do " + cando + " per second")
   }
 }
