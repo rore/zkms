@@ -8,8 +8,13 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Callable
 import com.google.common.util.concurrent.AtomicDouble
+import im.rore.zkms.zkmsObjectService
 
 object LoadTestSubscriber {
+  
+	class MyMessage {
+		var count:Int = 0;
+	}
 
 	var msgNum = new AtomicInteger
 	val pool: ExecutorService = Executors.newFixedThreadPool(5)
@@ -21,7 +26,7 @@ object LoadTestSubscriber {
 		}
 	}
 
-	def messageCallback(msg: zkmsStringService#MessageReceived) {
+	def messageCallback(msg: zkmsObjectService[MyMessage]#MessageReceived) {
 		pool.submit(task)
 	}
 
@@ -53,7 +58,7 @@ object LoadTestSubscriber {
 			}
 		}
 
-		val service = new zkmsStringService(config.zookeeper)
+		val service = new zkmsObjectService[MyMessage](config.zookeeper)
 		service.subscribe(config.topic, messageCallback)
 		var line: String = null;
 		while ({ line = Console.readLine; line } != null) {

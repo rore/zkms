@@ -314,7 +314,7 @@ private object Helper {
 }
 
 class zkmsObjectService[T](zkConnection: String, listenerThreads: Int)(implicit tag: ClassTag[T]) extends zkmsService[T](zkConnection, listenerThreads) with ObjectSerializer[T] {
-  //def this(zkConnection: String)(implicit tag: TypeTag[T]) = this(zkConnection, 5)
+  def this(zkConnection: String)(implicit tag: ClassTag[T]) = this(zkConnection, 5)
   def this(zkConnection: String, classof: java.lang.Class[T]) = this(zkConnection, 5)(ClassTag(classof))
   def t = classTag[T]
 }

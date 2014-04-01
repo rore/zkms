@@ -12,8 +12,13 @@ import java.util.concurrent.FutureTask
 import scala.collection.JavaConversions._
 import java.util.concurrent.atomic.AtomicInteger
 import com.google.common.util.concurrent.AtomicDouble
+import im.rore.zkms.zkmsObjectService
 
 object LoadTestBroadcaster {
+  
+  class MyMessage {
+    var count:Int = 0;
+  }
 
   def main(args: Array[String]) {
 
@@ -50,13 +55,14 @@ object LoadTestBroadcaster {
     }
 
     val pool: ExecutorService = Executors.newFixedThreadPool(config.threads)
-    val service = new zkmsStringService(config.zookeeper)
+    val service = new zkmsObjectService[MyMessage](config.zookeeper)
     val bmessage = config.message.mkString(" ")
     val msgNum = new AtomicInteger 
     var timer = new AtomicDouble
     def doBroadcast(n:Int) = {
+      val msg = new MyMessage { count = n; }
       val t0 = System.nanoTime()
-      service.broadcast(config.topic, n.toString);
+      service.broadcast(config.topic, msg);
       val t1 = System.nanoTime()
       val elapsed = (t1 - t0)
       timer.addAndGet(elapsed)
