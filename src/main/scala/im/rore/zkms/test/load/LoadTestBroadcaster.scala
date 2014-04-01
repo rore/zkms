@@ -55,14 +55,14 @@ object LoadTestBroadcaster {
     }
 
     val pool: ExecutorService = Executors.newFixedThreadPool(config.threads)
-    val service = new zkmsObjectService[MyMessage](config.zookeeper)
+    val service = new zkmsStringService(config.zookeeper)
     val bmessage = config.message.mkString(" ")
     val msgNum = new AtomicInteger 
     var timer = new AtomicDouble
     def doBroadcast(n:Int) = {
       val msg = new MyMessage { count = n; }
       val t0 = System.nanoTime()
-      service.broadcast(config.topic, msg);
+      service.broadcast(config.topic, n.toString);
       val t1 = System.nanoTime()
       val elapsed = (t1 - t0)
       timer.addAndGet(elapsed)

@@ -129,7 +129,7 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
    *  @param callback
    *            a callback function that will receive the message
    */
-  def subscribe(topic: String, callback: messageCallback) {
+  def subscribe(topic: String, callback: messageCallback, errorCallback: messageErrorCallback = null) {
     val clientPath = clientsPath(clientId)
     val subscriptionPath = subscriberPath(topic, clientId)
     val messagesPath = topicPath(topic, clientId)
@@ -143,7 +143,7 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
     resourcesCache.start(StartMode.BUILD_INITIAL_CACHE)
     val listener = new zkmsPathChildrenCacheListener(topic, messagesPath)
     resourcesCache.getListenable().addListener(listener);
-    watchers.put(messagesPath, new WatcherData(resourcesCache, callback));
+    watchers.put(messagesPath, new WatcherData(resourcesCache, callback, errorCallback));
   }
 
   /**
@@ -195,6 +195,9 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
   class MessageReceived(val topic: String, val message: T) {
   }
 
+  class MessageReceivedError(val topic: String, val error: String) {
+  }
+
   // a listener callback class that receives messages on changes in zNodes
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
 
@@ -203,8 +206,16 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
         // look for child add / update events - these are changed messages under our subscriber path
         case PathChildrenCacheEvent.Type.CHILD_ADDED | PathChildrenCacheEvent.Type.CHILD_UPDATED => {
           val fullPath = parentPath + "/" + ZKPaths.getNodeFromPath(event.getData().getPath());
-          val data = deserializeMessage(event.getData().getData())
-          (data, fullPath)
+          try{
+            val data = deserializeMessage(event.getData().getData())
+            (data, fullPath)
+          }
+          catch {
+            case e:Throwable => {
+            	callErrorCallback(parentPath, topic, "failed deserializing: " + e.toString())
+            }
+            throw e;
+          }
         }
         case _ => (null, null)
       }
@@ -219,7 +230,8 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
   }
 
   type messageCallback = MessageReceived => Unit
-  protected class WatcherData(val cache: PathChildrenCache, val callback: messageCallback)
+  type messageErrorCallback = MessageReceivedError => Unit
+  protected class WatcherData(val cache: PathChildrenCache, val callback: messageCallback, val errorCallback: messageErrorCallback)
 
   // call a callback function for a received message
   private def callCallback(watcherPath: String, topic: String, message: T) {
@@ -231,7 +243,36 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
               // get the listener
               watchers.get(watcherPath) match {
                 case d: Some[WatcherData] => {
-                  d.get.callback(new MessageReceived(topic, message))
+               	  d.get.callback(new MessageReceived(topic, message))
+                }
+                case None => {}
+              }
+            }
+            catch {
+              case e: Throwable => logger.error("failed calling callback", e)
+            }
+          }
+        }
+      }
+    }
+    catch {
+      case e: Throwable => logger.error("failed calling callback", e)
+    }
+  }
+
+  private def callErrorCallback(watcherPath: String, topic: String, errorMsg:String) {
+    try {
+      submitToExecutor {
+        new Runnable() {
+          override def run() {
+            try {
+              // get the listener
+              watchers.get(watcherPath) match {
+                case d: Some[WatcherData] => {
+                  if (!errorMsg.isNullOrEmpty){
+                    if (null != d.get.errorCallback)
+                      d.get.errorCallback(new MessageReceivedError(topic, errorMsg))
+                  }
                 }
                 case None => {}
               }

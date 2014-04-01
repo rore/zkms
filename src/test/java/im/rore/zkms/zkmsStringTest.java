@@ -26,7 +26,7 @@ public class zkmsStringTest {
 	@Test
 	public void testBroadcast() {
 		zkmsStringService service = new zkmsStringService(zkConnection);
-		service.subscribe("topic1", f);
+		service.subscribe("topic1", f, null);
 		service.broadcast("topic1", "m1", true);
 		
 		int tries = 0;

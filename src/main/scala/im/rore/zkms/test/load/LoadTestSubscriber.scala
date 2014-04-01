@@ -26,8 +26,18 @@ object LoadTestSubscriber {
 		}
 	}
 
+	def errortask(topic: String, msg:String) = new Callable[Unit]() {
+		def call(): Unit = {
+			System.out.print("\rgot error for topic: " + topic + ": " + msg);
+		}
+	}
+
 	def messageCallback(msg: zkmsObjectService[MyMessage]#MessageReceived) {
 		pool.submit(task)
+	}
+
+	def messageErrorCallback(msg: zkmsObjectService[MyMessage]#MessageReceivedError) {
+		pool.submit(errortask(msg.topic, msg.error))
 	}
 
 	def main(args: Array[String]) {
@@ -59,7 +69,7 @@ object LoadTestSubscriber {
 		}
 
 		val service = new zkmsObjectService[MyMessage](config.zookeeper)
-		service.subscribe(config.topic, messageCallback)
+		service.subscribe(config.topic, messageCallback, messageErrorCallback)
 		var line: String = null;
 		while ({ line = Console.readLine; line } != null) {
 			if (line == "quit" || line == "q") {

@@ -33,7 +33,7 @@ public class zkmsObjectTest {
 		msg.Message = "this is my message";
 		
 		zkmsObjectService<MyMessage> service = new zkmsObjectService<MyMessage>(zkConnection, MyMessage.class);
-		service.subscribe("topic1", f);
+		service.subscribe("topic1", f, null);
 		service.broadcast("topic1", msg, true);
 		
 		int tries = 0;
