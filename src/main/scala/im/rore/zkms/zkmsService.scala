@@ -3,9 +3,6 @@ package im.rore.zkms
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.CuratorFrameworkFactory
 import org.apache.curator.retry.ExponentialBackoffRetry
-
-import im.rore.zkms.AutoResetEvent;
-
 import java.util.UUID
 import org.apache.zookeeper.KeeperException
 import org.apache.zookeeper.KeeperException.NoNodeException
@@ -26,6 +23,10 @@ import org.apache.curator.framework.recipes.leader.LeaderSelector
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListener
 import org.apache.curator.framework.state.ConnectionState
 import org.apache.zookeeper.KeeperException.NodeExistsException
+import scala.reflect.runtime.universe._
+import scala.reflect._
+import scala.reflect.api.TypeCreator
+import scala.reflect.api.Universe
 
 /**
  * A simple messaging service based on zookeeper.
@@ -36,16 +37,17 @@ import org.apache.zookeeper.KeeperException.NodeExistsException
  * that need a simple way of broadcasting messages to all nodes of the service.
  *
  * @author Rotem Hermon
- * 
+ *
  * @param zkConnection
  * 			zookeeper connection string
  * @param listenerThreads
  * 			the number of threads to use for zookeeper notifications and subscriber callbacks
- *    
+ *
  */
-class zkmsService(zkConnection: String, listenerThreads:Int=5) extends LeaderSelectorListener {
-  def this(zkConnection: String) = this(zkConnection, 5)
-import zkmsService._
+abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
+  extends LeaderSelectorListener {
+
+  import zkmsService._
 
   private val ZK_NAMESPACE = "zkms"
   private val CLIENTS_PATH = "/clients"
@@ -54,10 +56,10 @@ import zkmsService._
   private val CLEANER_LEADER_PATH = "/cleaner_leader";
   private val logger = LoggerFactory.getLogger(this.getClass());
   private val executorService: ExecutorService = Executors.newFixedThreadPool(listenerThreads, ThreadUtils.newThreadFactory("zkmsThreadPool"));
-  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala; 
+  private val watchers = new ConcurrentHashMap[String, WatcherData].asScala;
   private val monitor: AutoResetEvent = new AutoResetEvent(false);
   private var _isLeader = false;
-  private var cleaner: ZkmsCleaner = null;
+  private var cleaner: ZkmsCleaner[T] = null;
 
   // create the curator zookeeper client
   logger.debug("creating zk client for: " + zkConnection)
@@ -75,7 +77,7 @@ import zkmsService._
   // start the leader selection to enable a cleanup job to cleanup after disconnected nodes
   private var leaderSelector: LeaderSelector = new LeaderSelector(zkClient, CLEANER_LEADER_PATH, this);
   leaderSelector.start();
-
+  
   /**
    * Shuts down the service
    */
@@ -85,6 +87,8 @@ import zkmsService._
     zkClient.close();
   }
 
+  def serializeMessage(message: T): Array[Byte]
+  def deserializeMessage(bytes: Array[Byte]): T
   /**
    * Broadcast a message to all subscribers of the topic
    *
@@ -95,9 +99,9 @@ import zkmsService._
    *  @param sendToSelf
    *            if true will send also to a subscriber running under the current client
    */
-  def broadcast(topic: String, message: String, sendToSelf: Boolean = false) {
+  def broadcast(topic: String, message: T, sendToSelf: Boolean = false) {
     if (topic.isNullOrEmpty) throw new IllegalArgumentException("topic is null")
-    if (message.isNullOrEmpty) throw new IllegalArgumentException("message is null")
+    if (null == message) throw new IllegalArgumentException("message is null")
     try {
       val path = subscribersPath(topic)
       // get all subscribers for topic
@@ -105,8 +109,9 @@ import zkmsService._
       if (children.size() == 0) throw new NoSubscribersException(topic)
       children.asScala.foreach(child => {
         if (sendToSelf || (child != zkmsService.clientId)) {
+          val bytes = serializeMessage(message)
           val msgPath = messagePath(topic, child)
-          zkClient.create().withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(msgPath, message.toByteArray)
+          zkClient.create().withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(msgPath, bytes)
         }
       })
     }
@@ -124,7 +129,7 @@ import zkmsService._
    *  @param callback
    *            a callback function that will receive the message
    */
-  def subscribe(topic: String, callback: messageCallback) {
+  def subscribe(topic: String, callback: messageCallback, errorCallback: messageErrorCallback = null) {
     val clientPath = clientsPath(clientId)
     val subscriptionPath = subscriberPath(topic, clientId)
     val messagesPath = topicPath(topic, clientId)
@@ -138,15 +143,15 @@ import zkmsService._
     resourcesCache.start(StartMode.BUILD_INITIAL_CACHE)
     val listener = new zkmsPathChildrenCacheListener(topic, messagesPath)
     resourcesCache.getListenable().addListener(listener);
-    watchers.put(messagesPath, new WatcherData(resourcesCache, callback));
+    watchers.put(messagesPath, new WatcherData(resourcesCache, callback, errorCallback));
   }
 
-   /**
+  /**
    * Unsubscribe from a specific topic
    *
    *  @param topic
    *            topic to unsubscribe from
-   *            
+   *
    */
   def unsubscribe(topic: String) {
     val subscriptionPath = subscriberPath(topic, clientId)
@@ -187,22 +192,37 @@ import zkmsService._
   protected[zkms] def topicPath(topic: String, clientId: String) = messagesPath(clientId) + "/" + topic
   protected[zkms] def messagePath(topic: String, clientId: String) = topicPath(topic, clientId) + "/msg";
 
+  class MessageReceived(val topic: String, val message: T) {
+  }
+
+  class MessageReceivedError(val topic: String, val error: String) {
+  }
+
   // a listener callback class that receives messages on changes in zNodes
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
 
     override def childEvent(client: CuratorFramework, event: PathChildrenCacheEvent) {
-      val (message: String, path: String) = event.getType() match {
+      val (message: T, path: String) = event.getType() match {
         // look for child add / update events - these are changed messages under our subscriber path
         case PathChildrenCacheEvent.Type.CHILD_ADDED | PathChildrenCacheEvent.Type.CHILD_UPDATED => {
           val fullPath = parentPath + "/" + ZKPaths.getNodeFromPath(event.getData().getPath());
-          val data = new String(event.getData().getData(), "UTF-8");
-          (data, fullPath)
+          try{
+            val data = deserializeMessage(event.getData().getData())
+            (data, fullPath)
+          }
+          catch {
+            case e:Throwable => {
+            	callErrorCallback(parentPath, topic, "failed deserializing: " + e.toString())
+            }
+            throw e;
+          }
         }
-        case _ => ("", "")
+        case _ => (null, null)
       }
       // if we got a message call the callback and delete the message
-      if (!message.isNullOrEmpty) {
-        callCallback(parentPath, topic, message)
+      if (!path.isNullOrEmpty) {
+        if (null != message)
+          callCallback(parentPath, topic, message)
         // delete the message
         zkClient.delete().forPath(path)
       }
@@ -210,10 +230,11 @@ import zkmsService._
   }
 
   type messageCallback = MessageReceived => Unit
-  protected class WatcherData(val cache: PathChildrenCache, val callback: messageCallback)
+  type messageErrorCallback = MessageReceivedError => Unit
+  protected class WatcherData(val cache: PathChildrenCache, val callback: messageCallback, val errorCallback: messageErrorCallback)
 
   // call a callback function for a received message
-  private def callCallback(watcherPath: String, topic: String, message: String) {
+  private def callCallback(watcherPath: String, topic: String, message: T) {
     try {
       submitToExecutor {
         new Runnable() {
@@ -222,7 +243,36 @@ import zkmsService._
               // get the listener
               watchers.get(watcherPath) match {
                 case d: Some[WatcherData] => {
-                  d.get.callback(new MessageReceived(topic, message))
+               	  d.get.callback(new MessageReceived(topic, message))
+                }
+                case None => {}
+              }
+            }
+            catch {
+              case e: Throwable => logger.error("failed calling callback", e)
+            }
+          }
+        }
+      }
+    }
+    catch {
+      case e: Throwable => logger.error("failed calling callback", e)
+    }
+  }
+
+  private def callErrorCallback(watcherPath: String, topic: String, errorMsg:String) {
+    try {
+      submitToExecutor {
+        new Runnable() {
+          override def run() {
+            try {
+              // get the listener
+              watchers.get(watcherPath) match {
+                case d: Some[WatcherData] => {
+                  if (!errorMsg.isNullOrEmpty){
+                    if (null != d.get.errorCallback)
+                      d.get.errorCallback(new MessageReceivedError(topic, errorMsg))
+                  }
                 }
                 case None => {}
               }
@@ -286,5 +336,27 @@ object zkmsService {
     def toByteArray: Array[Byte] = if (null == s) null else s.getBytes("UTF8")
     def isNullOrEmpty: Boolean = if (null == s || s.isEmpty()) true else false
   }
+}
+
+class zkmsStringService(zkConnection: String, listenerThreads: Int = 5) extends zkmsService[String](zkConnection, listenerThreads) with NoSerializer {
+  def this(zkConnection: String) = this(zkConnection, 5)
+}
+
+private object Helper {
+    def mkTypeTag[T](mirror: Mirror)(tpe: Type): mirror.universe.TypeTag[T] =
+    mirror.universe.TypeTag[T](mirror, new TypeCreator {
+      def apply[U <: Universe with Singleton](m: scala.reflect.api.Mirror[U]): U#Type =
+        if (m eq mirror) tpe.asInstanceOf[U#Type]
+        else
+          throw new IllegalArgumentException
+      (s"Type defined in $mirror cannot be migrated to other mirrors.")
+    })
+
+}
+
+class zkmsObjectService[T](zkConnection: String, listenerThreads: Int)(implicit tag: ClassTag[T]) extends zkmsService[T](zkConnection, listenerThreads) with ObjectSerializer[T] {
+  def this(zkConnection: String)(implicit tag: ClassTag[T]) = this(zkConnection, 5)
+  def this(zkConnection: String, classof: java.lang.Class[T]) = this(zkConnection, 5)(ClassTag(classof))
+  def t = classTag[T]
 }
 

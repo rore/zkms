@@ -3,13 +3,14 @@ package im.rore.zkms.app
 import im.rore.zkms.zkmsService
 import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
+import im.rore.zkms.zkmsStringService
 
 object Broadcaster {
 
   def main(args: Array[String]) {
     
     case class Config(
-      zookeeper: String = null,
+      zookeeper: String = null, 
       topic: String = null,
       message: List[String] = Nil) {
       def validate = {
@@ -36,7 +37,7 @@ object Broadcaster {
       }
     }
 
-    val service = new zkmsService(config.zookeeper)
+    val service = new zkmsStringService(config.zookeeper)
     service.broadcast(config.topic, config.message.mkString(" "));
     service.shutdown
   }

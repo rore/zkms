@@ -32,18 +32,23 @@ To use zkms as a maven dependency add the following repository and dependency:
 	<dependency>
 				<groupId>im.rore</groupId>
 				<artifactId>zkms</artifactId>
-				<version>0.0.1-SNAPSHOT</version>
+				<version>0.0.2-SNAPSHOT</version>
 	</dependency>
 </dependencies>
 ```
-The class **zkmsService** implements all the methods for using the messaging service.
+The class *zkmsService* is an abstract generic class that implements all the methods for using the messaging service.   
+To use the service you need a concrete implementation that provides the serialization for the messages. This is done using a mixin that implements the *serializeMessage* and *deserializeMessage* methods.
+
+The library contains two such preconfigured concrete implementations:
+- **zkmsStringService** - An implementation that uses strings as messages.
+- **zkmsObjectService** - A generic implementation that can be instantiated with any type, and uses [kryo](https://github.com/twitter/chill) for serialization.
 
 ###Broadcasting a message
 Messages are broadcasted into "topics" - an arbitrary string used to group messages together. 
 
 Example (in real life use you will keep the zkms service instance across the lifetime of the application and will only shut it down on exit):
 ```scala
-val service = new zkmsService(zkConnection);
+val service = new zkmsStringService(zkConnection);
 service.broadcast("mytopic", "hello world!", false);
 service.shutdown();
 ```
@@ -52,32 +57,38 @@ service.shutdown();
 Subscription is done to a specific topic. A client can subscribe to multiple topics.
 Example:
 
-scala:
+scala, using the string service:
 ```scala
-def messageCallback(msg:MessageReceived) {
+def messageCallback(msg:zkmsStringService#MessageReceived) {
    println(msg.message);
 }
-val service = new zkmsService(zkConnection)
+val service = new zkmsStringService(zkConnection)
 service.subscribe(topic, messageCallback)
 ```
 
-java (in Java defining the callback is a bit uglier):
+java, using a custom message class (in Java defining the callback is a bit uglier):
 ```java
 import scala.Function1;
 import scala.runtime.AbstractFunction1;
 import scala.runtime.BoxedUnit;
 
-Function1<MessageReceived, BoxedUnit> messageCallback = new AbstractFunction1<MessageReceived, BoxedUnit>() {
-	    public BoxedUnit apply(MessageReceived message) {
+public class MyMessage {
+		public String Message;
+}
+
+Function1<zkmsObjectService<MyMessage>.MessageReceived, BoxedUnit> messageCallback = 
+	new AbstractFunction1<zkmsObjectService<MyMessage>.MessageReceived, BoxedUnit>() {
+	    public BoxedUnit apply(zkmsObjectService<MyMessage>.MessageReceived message) {
 	    	String topic = message.topic();
-	    	String msg = message.message();
+	    	MyMessage msg = message.message();
 	    	// Do your thing here
 	        return null;
     }
 };
 
 public void subscribe() {	
-	zkmsService service = new zkmsService(zkConnection);
-	service.subscribe("topic1", messageCallback);
+	zkmsObjectService<MyMessage> service = 
+					new zkmsObjectService<MyMessage>(zkConnection, MyMessage.class);
+	service.subscribe("topic1", messageCallback, null);
 }
 ```

@@ -1,9 +1,8 @@
 package im.rore.zkms.app
 
-import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsStringService
 import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
-import im.rore.zkms.MessageReceived
 
 object Subscriber {
 
@@ -37,7 +36,7 @@ object Subscriber {
       }
     }
 
-    val service = new zkmsService(config.zookeeper)
+    val service = new zkmsStringService(config.zookeeper)
     service.subscribe(config.topic, message)
     var line:String=null;
     while ({line = Console.readLine; line} != null){
@@ -49,7 +48,7 @@ object Subscriber {
     } 
   }
   
-  def message(msg:MessageReceived) {
+  def message(msg:zkmsStringService#MessageReceived) {
     println(msg.message);
   }
 }

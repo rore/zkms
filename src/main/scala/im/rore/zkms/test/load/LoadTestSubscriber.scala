@@ -1,16 +1,20 @@
 package im.rore.zkms.test.load
 
-import im.rore.zkms.zkmsService
+import im.rore.zkms.zkmsStringService
 import im.rore.zkms.zkmsService._
 import org.sellmerfud.optparse._
-import im.rore.zkms.MessageReceived
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Callable
 import com.google.common.util.concurrent.AtomicDouble
+import im.rore.zkms.zkmsObjectService
 
 object LoadTestSubscriber {
+  
+	class MyMessage {
+		var count:Int = 0;
+	}
 
 	var msgNum = new AtomicInteger
 	val pool: ExecutorService = Executors.newFixedThreadPool(5)
@@ -22,8 +26,18 @@ object LoadTestSubscriber {
 		}
 	}
 
-	def messageCallback(msg: MessageReceived) {
+	def errortask(topic: String, msg:String) = new Callable[Unit]() {
+		def call(): Unit = {
+			System.out.print("\rgot error for topic: " + topic + ": " + msg);
+		}
+	}
+
+	def messageCallback(msg: zkmsObjectService[MyMessage]#MessageReceived) {
 		pool.submit(task)
+	}
+
+	def messageErrorCallback(msg: zkmsObjectService[MyMessage]#MessageReceivedError) {
+		pool.submit(errortask(msg.topic, msg.error))
 	}
 
 	def main(args: Array[String]) {
@@ -54,8 +68,8 @@ object LoadTestSubscriber {
 			}
 		}
 
-		val service = new zkmsService(config.zookeeper)
-		service.subscribe(config.topic, messageCallback)
+		val service = new zkmsObjectService[MyMessage](config.zookeeper)
+		service.subscribe(config.topic, messageCallback, messageErrorCallback)
 		var line: String = null;
 		while ({ line = Console.readLine; line } != null) {
 			if (line == "quit" || line == "q") {
