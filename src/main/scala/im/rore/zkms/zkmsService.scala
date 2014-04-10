@@ -107,9 +107,9 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
       // get all subscribers for topic
       val children = zkClient.getChildren().forPath(path)
       if (children.size() == 0) throw new NoSubscribersException(topic)
+      val bytes = serializeMessage(message)
       children.asScala.foreach(child => {
         if (sendToSelf || (child != zkmsService.clientId)) {
-          val bytes = serializeMessage(message)
           val msgPath = messagePath(topic, child)
           zkClient.create().withMode(CreateMode.PERSISTENT_SEQUENTIAL).forPath(msgPath, bytes)
         }
