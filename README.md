@@ -92,3 +92,4 @@ public void subscribe() {
 	service.subscribe("topic1", messageCallback, null);
 }
 ```
+A blog post with more details on the internal implementation can be [found here](http://rore.im/posts/zookeeper-pub-sub-messaging/). 
