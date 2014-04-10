@@ -67,17 +67,17 @@ object LoadTestBroadcaster {
       val elapsed = (t1 - t0)
       timer.addAndGet(elapsed)
     }
-    def task = new Callable[Unit]() {
+    def task(n:Int) = new Callable[Unit]() {
         def call(): Unit = {
-          val n = msgNum.incrementAndGet()
-          System.out.print("\rbroadcasting: "  + n)
+          //val n = msgNum.incrementAndGet()
           doBroadcast(n)
+          System.out.print("\rbroadcasting: "  + n)
         }
       }
     
     val tasks = new ListBuffer[Callable[Unit]]
     for (a <- 1 to config.iterations) {
-      tasks += task
+      tasks += task(a)
     }
     val starttime = System.nanoTime()
     pool.invokeAll(tasks).map(f => f.get())
