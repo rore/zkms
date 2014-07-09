@@ -201,14 +201,15 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
   // a listener callback class that receives messages on changes in zNodes
   protected class zkmsPathChildrenCacheListener(val topic: String, val parentPath: String) extends PathChildrenCacheListener {
 
+    case class eventData(message: T, path: String);
     override def childEvent(client: CuratorFramework, event: PathChildrenCacheEvent) {
-      val (message: T, path: String) = event.getType() match {
+      val data:eventData = event.getType() match {
         // look for child add / update events - these are changed messages under our subscriber path
         case PathChildrenCacheEvent.Type.CHILD_ADDED | PathChildrenCacheEvent.Type.CHILD_UPDATED => {
           val fullPath = parentPath + "/" + ZKPaths.getNodeFromPath(event.getData().getPath());
           try{
             val data = deserializeMessage(event.getData().getData())
-            (data, fullPath)
+            eventData(data, fullPath)
           }
           catch {
             case e:Throwable => {
@@ -216,15 +217,17 @@ abstract class zkmsService[T](zkConnection: String, listenerThreads: Int = 5)
             }
             throw e;
           }
+        } 
+        case _ => {
+          null
         }
-        case _ => (null, null)
       }
       // if we got a message call the callback and delete the message
-      if (!path.isNullOrEmpty) {
-        if (null != message)
-          callCallback(parentPath, topic, message)
+      if (null != data && !data.path.isNullOrEmpty) {
+        if (null != data.message)
+          callCallback(parentPath, topic, data.message)
         // delete the message
-        zkClient.delete().forPath(path)
+        zkClient.delete().forPath(data.path)
       }
     }
   }
