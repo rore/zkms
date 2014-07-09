@@ -35,12 +35,14 @@ public class zkmsObjectTest {
 		zkmsObjectService<MyMessage> service = new zkmsObjectService<MyMessage>(zkConnection, MyMessage.class);
 		service.subscribe("topic1", f, null);
 		service.broadcast("topic1", msg, true);
+		service.broadcast("topic1", msg, true);
+		service.broadcast("topic1", msg, true);
 		
 		int tries = 0;
 		while (!gotIt && tries < 10) {
 			tries ++;
 			try {
-				Thread.sleep(1000);
+				Thread.sleep(10000);
 			} catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
