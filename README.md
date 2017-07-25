@@ -18,7 +18,7 @@ Use this library if you expect:
 **Don't** use this if you expect high message throughput or a lot of subscribers. Performance will probably *suck*.   
 See this [netflix note](https://github.com/Netflix/curator/wiki/Tech-Note-4) for additional information on possible issues with using zookeeper for messaging. 
 
-##Usage
+## Usage
 To use zkms as a maven dependency add the following repository and dependency:
 ```
 <repositories>
@@ -43,7 +43,7 @@ The library contains two such preconfigured concrete implementations:
 - **zkmsStringService** - An implementation that uses strings as messages.
 - **zkmsObjectService** - A generic implementation that can be instantiated with any type, and uses [kryo](https://github.com/twitter/chill) for serialization.
 
-###Broadcasting a message
+### Broadcasting a message
 Messages are broadcasted into "topics" - an arbitrary string used to group messages together. 
 
 Example (in real life use you will keep the zkms service instance across the lifetime of the application and will only shut it down on exit):
@@ -53,7 +53,7 @@ service.broadcast("mytopic", "hello world!", false);
 service.shutdown();
 ```
 
-###Subscribing to messages
+### Subscribing to messages
 Subscription is done to a specific topic. A client can subscribe to multiple topics.
 Example:
 
